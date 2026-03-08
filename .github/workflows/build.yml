@@ -30,34 +30,40 @@ jobs:
           # Clone tree-sitter to get the runtime
           git clone --depth 1 https://github.com/tree-sitter/tree-sitter.git ts-runtime
 
-          # Compile runtime for multiple architectures
-          mkdir -p build/ios-arm64
-          mkdir -p build/ios-simulator-arm64
-          mkdir -p build/ios-simulator-x86_64
+          # Prepare build directories
+          mkdir -p build/ios-device
+          mkdir -p build/ios-sim-arm64
+          mkdir -p build/ios-sim-x86_64
+          mkdir -p build/ios-simulator-combined
 
-          # iOS Device
-          xcrun -sdk iphoneos clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch arm64 -miphoneos-version-min=12.0 -o libts.o
-          xcrun -sdk iphoneos clang -c src/parser.c src/scanner.c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphoneos-version-min=12.0
-          ar rcs build/ios-arm64/libtree-sitter-swift.a parser.o scanner.o diagnostics.o libts.o
-          rm *.o
+          # 1. Build for iOS Device (arm64)
+          xcrun -sdk iphoneos clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch arm64 -miphoneos-version-min=12.0 -o build/ios-device/libts.o
+          xcrun -sdk iphoneos clang -c src/parser.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphoneos-version-min=12.0 -o build/ios-device/parser.o
+          xcrun -sdk iphoneos clang -c src/scanner.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphoneos-version-min=12.0 -o build/ios-device/scanner.o
+          xcrun -sdk iphoneos clang -c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphoneos-version-min=12.0 -o build/ios-device/diagnostics.o
+          ar rcs build/ios-device/libtree-sitter-swift.a build/ios-device/*.o
 
-          # iOS Simulator ARM64
-          xcrun -sdk iphonesimulator clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch arm64 -miphonesimulator-version-min=12.0 -o libts.o
-          xcrun -sdk iphonesimulator clang -c src/parser.c src/scanner.c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphonesimulator-version-min=12.0
-          ar rcs build/ios-simulator-arm64/libtree-sitter-swift.a parser.o scanner.o diagnostics.o libts.o
-          rm *.o
+          # 2. Build for iOS Simulator (arm64)
+          xcrun -sdk iphonesimulator clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch arm64 -miphonesimulator-version-min=12.0 -o build/ios-sim-arm64/libts.o
+          xcrun -sdk iphonesimulator clang -c src/parser.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphonesimulator-version-min=12.0 -o build/ios-sim-arm64/parser.o
+          xcrun -sdk iphonesimulator clang -c src/scanner.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphonesimulator-version-min=12.0 -o build/ios-sim-arm64/scanner.o
+          xcrun -sdk iphonesimulator clang -c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch arm64 -miphonesimulator-version-min=12.0 -o build/ios-sim-arm64/diagnostics.o
+          ar rcs build/ios-sim-arm64/libtree-sitter-swift.a build/ios-sim-arm64/*.o
 
-          # iOS Simulator x86_64
-          xcrun -sdk iphonesimulator clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch x86_64 -miphonesimulator-version-min=12.0 -o libts.o
-          xcrun -sdk iphonesimulator clang -c src/parser.c src/scanner.c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch x86_64 -miphonesimulator-version-min=12.0
-          ar rcs build/ios-simulator-x86_64/libtree-sitter-swift.a parser.o scanner.o diagnostics.o libts.o
-          rm *.o
+          # 3. Build for iOS Simulator (x86_64)
+          xcrun -sdk iphonesimulator clang -c ts-runtime/lib/src/lib.c -Its-runtime/lib/include -Its-runtime/lib/src -arch x86_64 -miphonesimulator-version-min=12.0 -o build/ios-sim-x86_64/libts.o
+          xcrun -sdk iphonesimulator clang -c src/parser.c -Isrc -Iinclude -Its-runtime/lib/include -arch x86_64 -miphonesimulator-version-min=12.0 -o build/ios-sim-x86_64/parser.o
+          xcrun -sdk iphonesimulator clang -c src/scanner.c -Isrc -Iinclude -Its-runtime/lib/include -arch x86_64 -miphonesimulator-version-min=12.0 -o build/ios-sim-x86_64/scanner.o
+          xcrun -sdk iphonesimulator clang -c src/diagnostics.c -Isrc -Iinclude -Its-runtime/lib/include -arch x86_64 -miphonesimulator-version-min=12.0 -o build/ios-sim-x86_64/diagnostics.o
+          ar rcs build/ios-sim-x86_64/libtree-sitter-swift.a build/ios-sim-x86_64/*.o
 
-          # Create XCFramework
+          # 4. Combine Simulator binaries into a fat library
+          lipo -create build/ios-sim-arm64/libtree-sitter-swift.a build/ios-sim-x86_64/libtree-sitter-swift.a -output build/ios-simulator-combined/libtree-sitter-swift.a
+
+          # 5. Create XCFramework
           xcodebuild -create-xcframework \
-            -library build/ios-arm64/libtree-sitter-swift.a -headers include -headers ts-runtime/lib/include \
-            -library build/ios-simulator-arm64/libtree-sitter-swift.a -headers include -headers ts-runtime/lib/include \
-            -library build/ios-simulator-x86_64/libtree-sitter-swift.a -headers include -headers ts-runtime/lib/include \
+            -library build/ios-device/libtree-sitter-swift.a -headers include -headers ts-runtime/lib/include \
+            -library build/ios-simulator-combined/libtree-sitter-swift.a -headers include -headers ts-runtime/lib/include \
             -output build/SwiftTreeSitter.xcframework
 
       - name: Upload XCFramework artifact
